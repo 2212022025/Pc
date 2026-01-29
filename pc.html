@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WebOS 11 - Ultimate Computer Simulator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- SYSTEM CORE --- */
+        :root {
+            --bg-color: #004e92;
+            --taskbar-color: rgba(20, 20, 20, 0.85);
+            --window-bg: #f5f5f5;
+            --accent: #0078d7;
+            --text-dark: #333;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
+            position: fixed;
+            touch-action: none; /* Prevent browser zooming/scrolling */
+        }
+
+        /* --- CUSTOM POINTER --- */
+        #cursor {
+            width: 20px; height: 20px;
+            position: fixed;
+            pointer-events: none;
+            z-index: 20000;
+            filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
+            display: none;
+        }
+        @media (hover: hover) {
+            #cursor { display: block; }
+            * { cursor: none !important; }
+        }
+
+        /* --- BOOT SCREEN --- */
+        #boot-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: black; z-index: 10000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white;
+        }
+        
+        .boot-loader {
+            display: flex; gap: 12px; margin-bottom: 20px;
+        }
+        .boot-dot {
+            width: 14px; height: 14px; background: white; border-radius: 50%;
+            animation: bootPulse 1.4s infinite ease-in-out both;
+        }
+        .boot-dot:nth-child(1) { animation-delay: -0.32s; }
+        .boot-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes bootPulse {
+            0%, 80%, 100% { transform: scale(0); opacity: 0; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* --- LOGIN SCREEN --- */
+        #login-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+            z-index: 9000; display: none;
+            flex-direction: column; justify-content: center; align-items: center;
+            backdrop-filter: blur(15px);
+        }
+        .login-box {
+            background: rgba(0,0,0,0.4); padding: 40px; border-radius: 10px;
+            display: flex; flex-direction: column; align-items: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            width: 90%; max-width: 400px;
+        }
+        .user-avatar { width: 100px; height: 100px; background: rgba(255,255,255,0.2); border-radius: 50%; margin-bottom: 15px; display: flex; justify-content: center; align-items: center; font-size: 40px; color: white; border: 2px solid rgba(255,255,255,0.5); }
+        .login-input { padding: 10px; width: 100%; margin-bottom: 15px; border: none; border-radius: 4px; background: rgba(255,255,255,0.9); outline: none; }
+        .login-btn { padding: 8px 30px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; cursor: pointer; transition: 0.2s; }
+
+        /* --- DESKTOP ENVIRONMENT (UPDATED FOR GRID) --- */
+        #desktop {
+            width: 100%; height: calc(100% - 45px);
+            background: url('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+            position: relative; /* Changed from Flex to Relative for absolute positioning */
+            overflow: hidden;
+            transition: background 0.5s;
+        }
+
+        .desktop-icon {
+            width: 90px; height: 100px; /* Fixed Grid Size */
+            position: absolute; /* Absolute positioning for grid system */
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; text-shadow: 1px 1px 3px black;
+            border: 1px solid transparent; border-radius: 4px;
+            cursor: pointer; 
+            transition: transform 0.1s, background 0.1s, border 0.1s;
+            z-index: 10;
+        }
+        .desktop-icon:hover { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); }
+        
+        /* Dragging State */
+        .desktop-icon.dragging {
+            opacity: 0.8;
+            transform: scale(1.1);
+            z-index: 1000;
+            background: rgba(255,255,255,0.2);
+            border: 1px dashed white;
+            pointer-events: none; /* Let events pass through to document for tracking */
+        }
+
+        .desktop-icon i { font-size: 36px; margin-bottom: 8px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));pointer-events: none; }
+        .icon-label { font-size: 13px; text-align: center; line-height: 1.2; word-break: break-word; pointer-events: none;}
+
+        /* --- WINDOWS SYSTEM --- */
+        .window {
+            position: absolute; 
+            top: 10%; left: 5%;
+            width: 90%; max-width: 600px;
+            height: 50%; max-height: 500px;
+            background: var(--window-bg);
+            border-radius: 8px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+            display: none; flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #555;
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            min-width: 280px; min-height: 200px;
+            z-index: 100;
+        }
+        .window.maximized {
+            top: 0 !important; left: 0 !important;
+            width: 100% !important; height: calc(100% - 45px) !important;
+            border-radius: 0;
+            max-width: none; max-height: none;
+        }
+        @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .title-bar {
+            height: 35px; background: #e0e0e0; display: flex; justify-content: space-between; align-items: center;
+            padding: 0 10px; cursor: default; border-bottom: 1px solid #ccc;
+            touch-action: none;
+        }
+        .window.focused .title-bar { background: #fff; color: #000; }
+        
+        .controls { display: flex; gap: 8px; }
+        .controls span {
+            display: flex; width: 18px; height: 18px; border-radius: 50%;
+            cursor: pointer; transition: 0.2s; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: rgba(0,0,0,0.5);
+        }
+        .close-btn { background: #ff5f56; } 
+        .min-btn { background: #ffbd2e; } 
+        .max-btn { background: #27c93f; }
+
+        .window-content { flex: 1; overflow: auto; position: relative; background: white; display: flex; flex-direction: column; }
+
+        /* App Specifics */
+        .terminal-bg { background: #0c0c0c; color: #ccc; font-family: 'Consolas', 'Courier New', monospace; padding: 10px; font-size: 14px;}
+        #term-input { background: transparent; border: none; color: #ccc; width: 50%; outline: none; font-family: inherit; font-size: inherit; }
+        
+        .notepad-area { width: 100%; height: 100%; resize: none; border: none; padding: 15px; font-family: 'Consolas', monospace; font-size: 16px; outline: none; user-select: text; cursor: text !important; }
+        
+        .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); height: 100%; }
+        .calc-btn { border: 1px solid #eee; background: #fff; font-size: 18px; cursor: pointer; transition: 0.1s;}
+        .calc-btn:active { background: #ddd; }
+        .calc-display { grid-column: span 4; background: #f3f3f3; color: #333; font-size: 32px; padding: 10px; text-align: right; display: flex; align-items: center; justify-content: flex-end; font-family: 'Consolas';}
+
+        /* --- PAINT APP STYLES --- */
+        .paint-toolbar {
+            background: #f0f0f0; border-bottom: 1px solid #ccc;
+            display: flex; align-items: center; padding: 5px 10px; gap: 10px; user-select: none;
+            flex-wrap: wrap; height: auto; min-height: 50px;
+        }
+        .paint-tool-group { display: flex; gap: 5px; align-items: center; border-right: 1px solid #ccc; padding-right: 10px; }
+        .paint-btn { 
+            width: 30px; height: 30px; border: 1px solid transparent; border-radius: 3px; 
+            cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 14px;
+        }
+        .paint-btn:hover { background: #e0e0e0; border-color: #bbb; }
+        .paint-btn.active-tool { background: #cce8ff; border-color: #99d1ff; }
+        
+        .paint-colors { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; width: 100px; }
+        .color-swatch { width: 16px; height: 16px; border: 1px solid #888; cursor: pointer; }
+        .color-swatch:hover { transform: scale(1.1); }
+        .color-swatch.active-color { border: 2px solid black; transform: scale(1.2); z-index: 2;}
+
+        .paint-canvas-container { 
+            flex: 1; background: #888; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        #paint-canvas { background: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.2); cursor: crosshair; }
+
+        /* --- TASKBAR --- */
+        #taskbar {
+            position: absolute; bottom: 0; width: 100%; height: 45px;
+            background: var(--taskbar-color); display: flex; align-items: center;
+            z-index: 9999; backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        #start-btn {
+            width: 45px; height: 100%; display: flex; justify-content: center; align-items: center;
+            color: #00aaff; font-size: 24px; cursor: pointer;
+        }
+        
+        .taskbar-item {
+            padding: 0 10px; height: 80%; display: flex; align-items: center; margin-left: 5px;
+            color: #ddd; border-bottom: 3px solid transparent; cursor: pointer; font-size: 13px;
+            background: rgba(255,255,255,0.05); border-radius: 4px;
+            max-width: 120px; overflow: hidden; white-space: nowrap;
+        }
+        .taskbar-item.active { border-bottom: 3px solid var(--accent); color: white; background: rgba(255,255,255,0.15); }
+        .taskbar-item span { overflow: hidden; text-overflow: ellipsis; }
+        
+        /* SYSTEM TRAY */
+        #sys-tray { 
+            margin-left: auto; display: flex; align-items: center; padding-right: 10px; 
+            color: white; font-size: 12px; gap: 12px; height: 100%;
+        }
+        
+        .tray-icon { cursor: pointer; display: flex; align-items: center; }
+        .tray-icon:hover { color: #ccc; }
+
+        #datetime { 
+            display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
+            font-size: 11px; line-height: 1.1; cursor: default; margin-right: 5px;
+        }
+
+        #battery-status { display: flex; align-items: center; gap: 4px; }
+        
+        /* Notification Center */
+        #notification-panel {
+            position: absolute; bottom: 50px; right: 10px; width: 300px; height: auto;
+            background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(15px);
+            border: 1px solid #444; border-radius: 8px;
+            color: white; display: none; flex-direction: column;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5); z-index: 10000;
+        }
+        .notif-header { padding: 10px; border-bottom: 1px solid #444; font-weight: bold; display: flex; justify-content: space-between; }
+        .notif-list { padding: 10px; font-size: 13px; max-height: 200px; overflow-y: auto; }
+        .notif-item { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; margin-bottom: 8px; }
+        .notif-title { font-weight: bold; margin-bottom: 4px; display: block; }
+
+        @media (max-width: 450px) {
+            #datetime { font-size: 10px; }
+        }
+
+        /* --- START MENU --- */
+        #start-menu {
+            position: absolute; bottom: 50px; left: 10px;
+            width: 300px; height: 400px; max-width: 85%; max-height: 60%;
+            background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(20px);
+            color: white; display: none; flex-direction: column;
+            padding: 15px; border-radius: 8px; z-index: 9998;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+        }
+        .start-header { font-size: 18px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #555; }
+        .start-item { padding: 12px; display: flex; align-items: center; gap: 15px; cursor: pointer; border-radius: 6px; transition: 0.2s; }
+        .start-item:hover { background: rgba(255,255,255,0.1); transform: translateX(5px); }
+        .start-item i { width: 25px; text-align: center; font-size: 18px; }
+
+        /* PC and Files */
+        .drive { padding: 15px; width: 100px; display:flex; flex-direction:column; align-items:center; cursor: pointer; }
+        .drive:hover { background: #eee; border-radius: 5px; }
+        .drive i { font-size: 40px; color: #888; margin-bottom:5px; }
+        .drive-bar { width: 100%; height: 6px; background: #ddd; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+        .drive-fill { height: 100%; background: #0078d7; }
+        
+        .file-explorer-bar { padding: 8px; background: #f0f0f0; border-bottom: 1px solid #ccc; display:flex; gap: 10px; }
+        .file-btn { padding: 5px 10px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 12px; }
+        .file-btn:hover { background: #e0e0e0; }
+        
+        .files-grid { display: flex; flex-wrap: wrap; padding: 10px; gap: 10px; }
+        .file-icon { width: 70px; height: 80px; display:flex; flex-direction:column; align-items:center; cursor: pointer; text-align: center; font-size:12px; position: relative; }
+        .file-icon:hover { background: #e0e0e0; border-radius: 4px; }
+        .file-icon i { font-size: 30px; margin-bottom: 5px; }
+        
+        .file-del-btn {
+            position: absolute; top: 0; right: 0; width: 20px; height: 20px;
+            background: #ff4444; color: white; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 10px; z-index: 5;
+        }
+        .file-icon:hover .file-del-btn { display: flex; }
+        .file-del-btn:hover { background: #cc0000; }
+
+        /* Store App */
+        .store-app-card { display: flex; background: white; padding: 15px; border-bottom: 1px solid #eee; gap: 15px; align-items: center; }
+        .store-icon { width: 60px; height: 60px; background: #222; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 30px; }
+        .store-info { flex: 1; }
+        .download-btn { background: #0078d7; color: white; border: none; padding: 8px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .download-btn:disabled { background: #ccc; cursor: default; }
+        
+        .delete-app-btn { background: #ff4444; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 5px;}
+        .delete-app-btn:hover { background: #cc0000; }
+
+        /* Settings Wallpapers */
+        .wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px; }
+        .wall-thumb { height: 50px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; background-size: cover; background-position: center; }
+        .wall-thumb:hover { border-color: #0078d7; }
+
+        /* --- CUSTOM WINDOWS POPUP (MODAL) --- */
+        #custom-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); z-index: 30000;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(2px);
+        }
+        .modal-box {
+            width: 320px; background: #fff; border-radius: 6px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; overflow: hidden;
+            animation: popIn 0.2s;
+            border: 1px solid #999;
+        }
+        .modal-header {
+            background: #f0f0f0; padding: 8px 12px; font-weight: 500; font-size: 14px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #ddd;
+        }
+        .modal-body { padding: 20px; font-size: 14px; color: #333; }
+        .modal-input {
+            width: 100%; padding: 6px; margin-top: 10px;
+            border: 1px solid #0078d7; outline: none;
+        }
+        .modal-footer {
+            background: #f9f9f9; padding: 10px;
+            display: flex; justify-content: flex-end; gap: 8px;
+            border-top: 1px solid #eee;
+        }
+        .modal-btn {
+            padding: 6px 18px; border: 1px solid #ccc; background: #e1e1e1;
+            cursor: pointer; font-size: 13px; min-width: 70px;
+            transition: 0.1s; border-radius: 2px;
+        }
+        .modal-btn:hover { background: #d0d0d0; border-color: #bbb; }
+        .modal-btn-primary {
+            background: #0078d7; color: white; border-color: #005a9e;
+        }
+        .modal-btn-primary:hover { background: #006cc1; }
+
+        .bin-item-row { display: flex; align-items: center; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .bin-actions button { margin-left: 5px; padding: 2px 8px; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 3px; }
+        .bin-actions button:hover { background: #eee; }
+
+    </style>
+</head>
+<body>
+
+    <!-- CUSTOM CURSOR -->
+    <div id="cursor">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" stroke-width="1">
+            <path d="M4,2L20,12L13,14L16,21L14,22L11,15L7,19V2Z" />
+        </svg>
+    </div>
+
+    <!-- BOOT SEQUENCE -->
+    <div id="boot-screen">
+        <i class="fab fa-windows" style="font-size: 60px; margin-bottom: 30px; color: #00aaff;"></i>
+        <div class="boot-loader">
+            <div class="boot-dot"></div>
+            <div class="boot-dot"></div>
+            <div class="boot-dot"></div>
+        </div>
+        <div id="boot-text" style="font-family: monospace;">Starting</div>
+    </div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-box">
+            <div class="user-avatar"><i class="fas fa-user-astronaut"></i></div>
+            <h2 style="color:white; margin:0 0 20px 0; font-weight: 400;">Login</h2>
+            <input type="password" class="login-input" placeholder="Password" id="pass-input" onkeydown="if(event.key==='Enter') login()">
+            <button class="login-btn" onclick="login()">Sign In</button>
+        </div>
+    </div>
+
+    <!-- DESKTOP (Grid System Updated) -->
+    <!-- Removed onclicks, using JS for Drag/Click Logic -->
+    <div id="desktop">
+        <div class="desktop-icon" data-app="pc">
+            <i class="fas fa-laptop" style="color: #4db8ff;"></i>
+            <span class="icon-label">This PC</span>
+        </div>
+        <div class="desktop-icon" data-app="store">
+            <i class="fas fa-shopping-bag" style="color: #ff3333;"></i>
+            <span class="icon-label">Store</span>
+        </div>
+        <div class="desktop-icon" data-app="terminal">
+            <i class="fas fa-terminal" style="color: #333;"></i>
+            <span class="icon-label">Terminal</span>
+        </div>
+        <div class="desktop-icon" data-app="notepad">
+            <i class="fas fa-file-lines" style="color: #fff;"></i>
+            <span class="icon-label">Notepad</span>
+        </div>
+        <div class="desktop-icon" data-app="paint">
+            <i class="fas fa-palette" style="color: #e91e63;"></i>
+            <span class="icon-label">MS Paint</span>
+        </div>
+        <div class="desktop-icon" data-app="calculator">
+            <i class="fas fa-calculator" style="color: #ffbd2e;"></i>
+            <span class="icon-label">Calculator</span>
+        </div>
+        <div class="desktop-icon" data-app="browser">
+            <i class="fab fa-chrome" style="color: #27c93f;"></i>
+            <span class="icon-label">Browser</span>
+        </div>
+        <div class="desktop-icon" data-app="settings">
+            <i class="fas fa-gear" style="color: #aaa;"></i>
+            <span class="icon-label">Settings</span>
+        </div>
+        
+        <div id="desktop-bluestack" class="desktop-icon" data-app="bluestack" style="display:none;">
+            <i class="fas fa-mobile-alt" style="color: #00aaff;"></i>
+            <span class="icon-label">Blue Stack</span>
+        </div>
+
+        <div class="desktop-icon" data-app="bin">
+            <i class="fas fa-trash-alt" style="color: #ddd;"></i>
+            <span class="icon-label">Recycle Bin</span>
+        </div>
+    </div>
+
+    <!-- CUSTOM POPUP MODAL -->
+    <div id="custom-modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span id="modal-title">System Message</span>
+                <span onclick="closeModal()" style="cursor:pointer;">✖</span>
+            </div>
+            <div class="modal-body">
+                <p id="modal-msg" style="margin:0;">Message goes here...</p>
+                <div id="modal-image-preview" style="display:none; margin-top:10px; text-align:center;"></div>
+                <input type="text" id="modal-input" class="modal-input" style="display:none;">
+            </div>
+            <div class="modal-footer">
+                <button id="modal-btn-cancel" class="modal-btn" onclick="closeModal()">Cancel</button>
+                <button id="modal-btn-ok" class="modal-btn modal-btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW: PC (With File Manager) -->
+    <div id="win-pc" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-pc')" onmousedown="dragStart(event, 'win-pc')">
+            <span><i class="fas fa-laptop"></i> This PC</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-pc')">➖</span><span class="max-btn" onclick="toggleMaximize('win-pc')">🔲</span><span class="close-btn" onclick="closeWindow('win-pc')">✖</span></div>
+        </div>
+        <div id="pc-drives" class="window-content" style="flex-direction: row; padding: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div class="drive" onclick="openFileManager()">
+                <i class="fas fa-hdd"></i><div style="font-size:12px; text-align:center;">Local Disk (C:)</div>
+                <div class="drive-bar"><div class="drive-fill" style="width: 70%;"></div></div>
+            </div>
+            <div class="drive">
+                <i class="fas fa-hdd"></i><div style="font-size:12px; text-align:center;">Data (D:)</div>
+                <div class="drive-bar"><div class="drive-fill" style="width: 20%;"></div></div>
+            </div>
+        </div>
+        <div id="pc-files" class="window-content" style="display:none; flex-direction:column;">
+            <div class="file-explorer-bar">
+                <button class="file-btn" onclick="document.getElementById('pc-files').style.display='none'; document.getElementById('pc-drives').style.display='flex'">⬆ Up</button>
+                <button class="file-btn" onclick="createFile('folder')">+ New Folder</button>
+                <button class="file-btn" onclick="createFile('file')">+ New File</button>
+            </div>
+            <div id="file-list" class="files-grid">
+                <!-- Generated Files -->
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW: STORE -->
+    <div id="win-store" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-store')" onmousedown="dragStart(event, 'win-store')">
+            <span><i class="fas fa-shopping-bag"></i> MS Store</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-store')">➖</span><span class="max-btn" onclick="toggleMaximize('win-store')">🔲</span><span class="close-btn" onclick="closeWindow('win-store')">✖</span></div>
+        </div>
+        <div class="window-content">
+            <div style="padding: 20px; border-bottom: 1px solid #eee;">
+                <h2>Top Free Apps</h2>
+            </div>
+            <div class="store-app-card">
+                <div class="store-icon" style="background: linear-gradient(45deg, #2b32b2, #1488cc);"><i class="fas fa-layer-group"></i></div>
+                <div class="store-info">
+                    <div style="font-weight:bold; font-size:16px;">Blue Stack 10</div>
+                    <div style="color:#666; font-size:12px;">Emulation &bull; 899 MB</div>
+                    <div id="dl-status" style="font-size:11px; color:#0078d7; margin-top:5px;"></div>
+                </div>
+                <button id="btn-dl-bluestack" class="download-btn" onclick="downloadApp('bluestack')">Get</button>
+                <button id="btn-del-bluestack" class="delete-app-btn" onclick="uninstallApp('bluestack')" style="display:none;" title="Uninstall"><i class="fas fa-trash-alt"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW: BLUE STACK (Simulated Phone) -->
+    <div id="win-bluestack" class="window" style="width: 360px; height: 600px; background: #000;">
+        <div class="title-bar" style="background:#222; color:white; border:none;" ontouchstart="dragStart(event, 'win-bluestack')" onmousedown="dragStart(event, 'win-bluestack')">
+            <span><i class="fas fa-mobile-alt"></i> Blue Stack Phone</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-bluestack')">➖</span><span class="max-btn" onclick="toggleMaximize('win-bluestack')">🔲</span><span class="close-btn" onclick="closeWindow('win-bluestack')">✖</span></div>
+        </div>
+        <div class="window-content" style="background: black; padding:0; overflow:hidden;">
+            <iframe src="" id="bluestack-frame" style="width:100%; height:100%; border:none; background: #fff;" allow="camera; microphone; geolocation"></iframe>
+        </div>
+    </div>
+
+    <!-- WINDOW: PAINT (New) -->
+    <div id="win-paint" class="window" style="width: 95%; max-width: 700px; height: 60%; max-height: 500px;">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-paint')" onmousedown="dragStart(event, 'win-paint')">
+            <span><i class="fas fa-palette"></i> MS Paint</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-paint')">➖</span><span class="max-btn" onclick="toggleMaximize('win-paint')">🔲</span><span class="close-btn" onclick="closeWindow('win-paint')">✖</span></div>
+        </div>
+        <div class="window-content" style="flex-direction: column; overflow: hidden;">
+            <div class="paint-toolbar">
+                <div class="paint-tool-group">
+                    <div class="paint-btn active-tool" title="Brush" onclick="setPaintTool('brush', this)"><i class="fas fa-paint-brush"></i></div>
+                    <div class="paint-btn" title="Eraser" onclick="setPaintTool('eraser', this)"><i class="fas fa-eraser"></i></div>
+                </div>
+                <div class="paint-tool-group">
+                    <div class="paint-btn" title="Rectangle" onclick="setPaintTool('rect', this)"><i class="far fa-square"></i></div>
+                    <div class="paint-btn" title="Circle" onclick="setPaintTool('circle', this)"><i class="far fa-circle"></i></div>
+                </div>
+                <div class="paint-colors">
+                    <div class="color-swatch active-color" style="background:black" onclick="setPaintColor('black', this)"></div>
+                    <div class="color-swatch" style="background:red" onclick="setPaintColor('red', this)"></div>
+                    <div class="color-swatch" style="background:blue" onclick="setPaintColor('blue', this)"></div>
+                    <div class="color-swatch" style="background:green" onclick="setPaintColor('green', this)"></div>
+                    <div class="color-swatch" style="background:orange" onclick="setPaintColor('orange', this)"></div>
+                    <div class="color-swatch" style="background:purple" onclick="setPaintColor('purple', this)"></div>
+                    <div class="color-swatch" style="background:brown" onclick="setPaintColor('brown', this)"></div>
+                    <div class="color-swatch" style="background:yellow" onclick="setPaintColor('yellow', this)"></div>
+                    <div class="color-swatch" style="background:gray" onclick="setPaintColor('gray', this)"></div>
+                    <div class="color-swatch" style="background:white" onclick="setPaintColor('white', this)"></div>
+                </div>
+                <div style="flex:1;"></div>
+                <div class="paint-tool-group" style="border:none;">
+                     <div class="paint-btn" title="Clear Canvas" onclick="clearCanvas()"><i class="fas fa-trash"></i></div>
+                     <div class="paint-btn" title="Save" onclick="savePaint()"><i class="fas fa-save" style="color:#0078d7;"></i></div>
+                </div>
+            </div>
+            <div class="paint-canvas-container">
+                <canvas id="paint-canvas" width="800" height="600"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Other Windows (Terminal, Notepad, etc.) -->
+    <div id="win-terminal" class="window" style="background: black;">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-terminal')" onmousedown="dragStart(event, 'win-terminal')">
+            <span><i class="fas fa-terminal"></i> Command Prompt</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-terminal')">➖</span><span class="max-btn" onclick="toggleMaximize('win-terminal')">🔲</span><span class="close-btn" onclick="closeWindow('win-terminal')">✖</span></div>
+        </div>
+        <div class="window-content terminal-bg" id="term-content" onclick="document.getElementById('term-input').focus()">
+            <div>WebOS [Version 11.0.22000]</div><br><div id="term-history"></div>
+            <div style="display:flex;"><span style="color: #0f0;">Hp/system/root@:/</span>&nbsp;<input type="text" id="term-input" autocomplete="off" onkeydown="handleTerm(event)"></div>
+        </div>
+    </div>
+
+    <div id="win-notepad" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-notepad')" onmousedown="dragStart(event, 'win-notepad')">
+            <span><i class="fas fa-file-lines"></i> Notepad</span>
+            <div class="controls">
+                <span title="Save" onclick="saveNotepad()" style="background:#0078d7; color:white; border-radius:3px; width:auto; padding:0 5px; font-weight:normal; font-size:11px; margin-right:5px;">Save</span>
+                <span class="min-btn" onclick="minimizeWindow('win-notepad')">➖</span>
+                <span class="max-btn" onclick="toggleMaximize('win-notepad')">🔲</span>
+                <span class="close-btn" onclick="closeWindow('win-notepad')">✖</span>
+            </div>
+        </div>
+        <div class="window-content"><textarea id="notepad-area" class="notepad-area" placeholder="Type here..."></textarea></div>
+    </div>
+
+    <div id="win-calculator" class="window" style="width: 260px;">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-calculator')" onmousedown="dragStart(event, 'win-calculator')">
+            <span><i class="fas fa-calculator"></i> Calculator</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-calculator')">➖</span><span class="max-btn" onclick="toggleMaximize('win-calculator')">🔲</span><span class="close-btn" onclick="closeWindow('win-calculator')">✖</span></div>
+        </div>
+        <div class="window-content" style="overflow: hidden;">
+            <div class="calc-grid">
+                <div class="calc-display" id="calc-res">0</div>
+                <button class="calc-btn" onclick="calc('C')" style="color:red">C</button><button class="calc-btn" onclick="calc('/')">÷</button><button class="calc-btn" onclick="calc('*')">×</button><button class="calc-btn" onclick="calc('DEL')">←</button>
+                <button class="calc-btn" onclick="calc('7')">7</button><button class="calc-btn" onclick="calc('8')">8</button><button class="calc-btn" onclick="calc('9')">9</button><button class="calc-btn" onclick="calc('-')">-</button>
+                <button class="calc-btn" onclick="calc('4')">4</button><button class="calc-btn" onclick="calc('5')">5</button><button class="calc-btn" onclick="calc('6')">6</button><button class="calc-btn" onclick="calc('+')">+</button>
+                <button class="calc-btn" onclick="calc('1')">1</button><button class="calc-btn" onclick="calc('2')">2</button><button class="calc-btn" onclick="calc('3')">3</button><button class="calc-btn" onclick="calc('=')" style="grid-row: span 2; background: #0078d7; color: white;">=</button>
+                <button class="calc-btn" onclick="calc('0')" style="grid-column: span 2;">0</button><button class="calc-btn" onclick="calc('.')">.</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="win-browser" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-browser')" onmousedown="dragStart(event, 'win-browser')">
+            <span><i class="fab fa-chrome"></i> Browser</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-browser')">➖</span><span class="max-btn" onclick="toggleMaximize('win-browser')">🔲</span><span class="close-btn" onclick="closeWindow('win-browser')">✖</span></div>
+        </div>
+        <div class="window-content" style="display:flex; flex-direction:column;">
+            <div style="padding: 8px; background: #eee; border-bottom: 1px solid #ccc; display: flex; gap: 5px;">
+                <button onclick="document.getElementById('web-frame').src='https://en.wikipedia.org/wiki/Special:Random'">↻</button>
+                <input type="text" value="https://en.wikipedia.org" style="flex:1; padding: 6px; border-radius: 3px; border: 1px solid #ccc; width: 50px;">
+            </div>
+            <iframe id="web-frame" src="https://en.wikipedia.org/wiki/Operating_system" style="flex:1; border:none; background:white;"></iframe>
+        </div>
+    </div>
+
+    <div id="win-settings" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-settings')" onmousedown="dragStart(event, 'win-settings')">
+            <span><i class="fas fa-gear"></i> Settings</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-settings')">➖</span><span class="max-btn" onclick="toggleMaximize('win-settings')">🔲</span><span class="close-btn" onclick="closeWindow('win-settings')">✖</span></div>
+        </div>
+        <div class="window-content" style="padding: 20px;">
+            <h3 style="margin-top:0;">Background</h3>
+            <p>Select a wallpaper (Saved automatically):</p>
+            <div class="wallpaper-grid">
+                <!-- Original Set -->
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                
+                <!-- New Added Backgrounds -->
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1482938289607-e9573fc25ebb?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1504639725590-34d0984388bd?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-image: url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=300&q=80');" onclick="changeBg(this)"></div>
+
+                <div class="wall-thumb" style="background-color: #004e92;" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-color: #333;" onclick="changeBg(this)"></div>
+                <div class="wall-thumb" style="background-color: #000;" onclick="changeBg(this)"></div>
+            </div>
+
+            <!-- ADDED RESET OPTION -->
+            <h3 style="margin-top:20px; color:#d9534f; border-top:1px solid #ccc; padding-top:20px;">System Management (Hp EliteBook Pro)</h3>
+            <p>Reset the simulator to factory settings. All saved files and installed apps will be deleted.</p>
+            <button onclick="systemResetRequest()" style="background-color: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%;">
+                <i class="fas fa-rotate-right"></i> Reset PC
+            </button>
+        </div>
+    </div>
+
+    <div id="win-bin" class="window">
+        <div class="title-bar" ontouchstart="dragStart(event, 'win-bin')" onmousedown="dragStart(event, 'win-bin')">
+            <span><i class="fas fa-trash-alt"></i> Recycle Bin</span>
+            <div class="controls"><span class="min-btn" onclick="minimizeWindow('win-bin')">➖</span><span class="max-btn" onclick="toggleMaximize('win-bin')">🔲</span><span class="close-btn" onclick="closeWindow('win-bin')">✖</span></div>
+        </div>
+        <div class="window-content">
+            <div style="padding: 10px; background: #eee; border-bottom:1px solid #ccc;">
+                <button onclick="emptyBin()" style="padding:5px 10px; border:1px solid #aaa; background:white; cursor:pointer;">Empty Bin</button>
+            </div>
+            <div id="bin-files" style="padding: 10px; display: flex; flex-direction: column;">
+                <!-- Bin Items Generated Here -->
+                <div style="padding:20px; text-align:center; color:#888;" id="bin-empty-msg">Empty.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- START MENU -->
+    <div id="start-menu">
+        <div class="start-header">Pinned Apps</div>
+        <div id="start-apps-list">
+            <!-- Dynamic Apps will be injected here -->
+        </div>
+        
+        <div style="margin-top: auto; border-top: 1px solid #444; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display:flex; align-items:center; gap: 10px;">
+                 <div style="width:30px; height:30px; background:#ccc; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#333;"><i class="fas fa-user"></i></div>
+                 <span>Admin</span>
+            </div>
+            <div class="start-item" onclick="location.reload()" style="padding: 8px;"><i class="fas fa-power-off" style="color: #ff5f56; margin:0;"></i></div>
+        </div>
+    </div>
+    
+    <!-- NOTIFICATION CENTER (Messages) -->
+    <div id="notification-panel">
+        <div class="notif-header">
+            <span>Notifications</span>
+            <span style="cursor:pointer; font-weight:normal; font-size:12px;" onclick="document.getElementById('notification-panel').style.display='none'">Clear All</span>
+        </div>
+        <div class="notif-list">
+            <div class="notif-item">
+                <span class="notif-title"><i class="fas fa-shield-alt" style="color:#00aaff"></i> System Security</span>
+                Windows Defender has scanned your system. No threats found.
+            </div>
+            <div class="notif-item">
+                <span class="notif-title"><i class="fas fa-envelope" style="color:#ffbd2e"></i> Mail App</span>
+                Welcome to Windows 11, Sync your account.
+            </div>
+        </div>
+    </div>
+
+    <!-- TASKBAR -->
+    <div id="taskbar">
+        <div id="start-btn" onclick="toggleStart()"><i class="fab fa-windows"></i></div>
+        <div id="task-list" style="display:flex; height:100%; overflow-x: auto; flex: 1;">
+            <!-- Taskbar items added here via JS -->
+        </div>
+        
+        <!-- SYSTEM TRAY -->
+        <div id="sys-tray">
+            <i class="fas fa-chevron-up"></i>
+            
+            <!-- Battery -->
+            <div id="battery-status" class="tray-icon" title="Battery Status">
+                <i id="battery-icon" class="fas fa-battery-three-quarters"></i>
+                <span id="battery-level" style="font-size:11px;"></span>
+            </div>
+            
+            <i class="fas fa-wifi"></i>
+            <i class="fas fa-volume-up"></i>
+            
+            <!-- Date & Time -->
+            <div id="datetime">
+                <span id="clock-time" style="font-weight: 500;">12:00 PM</span>
+                <span id="clock-date">1/1/2026</span>
+            </div>
+            
+            <!-- Message/Notification -->
+            <div style="position:relative;" class="tray-icon" onclick="toggleNotif()">
+                <i class="fas fa-comment-alt"></i>
+                <span style="position:absolute; top:-2px; right:-2px; width:6px; height:6px; background:red; border-radius:50%;"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* --- LOCAL STORAGE INITIALIZATION --- */
+        const defaultState = {
+            wallpaper: "url('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1920&q=80')",
+            files: [
+                {name: 'Documents', type: 'folder', content: ''},
+                {name: 'Downloads', type: 'folder', content: ''},
+                {name: 'Notes.txt', type: 'file', content: 'Welcome to WebOS 11.\nThis is a sample text file.'},
+            ],
+            bin: [], // Stores deleted files
+            installedApps: {
+                bluestack: false
+            },
+            iconLayout: {} // New: Stores desktop icon grid positions {appId: {col: 0, row: 0}}
+        };
+
+        // Load state or use default
+        let sysData = JSON.parse(localStorage.getItem('webos_sys_v1')) || defaultState;
+
+        // Ensure new properties exist if loading from old version
+        if(!sysData.bin) sysData.bin = [];
+        if(!sysData.iconLayout) sysData.iconLayout = {};
+        if(!sysData.files[0].content && sysData.files[0].content !== "") {
+            sysData.files.forEach(f => f.content = f.content || "");
+        }
+
+        function saveData() {
+            localStorage.setItem('webos_sys_v1', JSON.stringify(sysData));
+        }
+
+        /* --- CUSTOM MODAL SYSTEM --- */
+        function showModal(type, title, msg, callback, defaultValue = '') {
+            const overlay = document.getElementById('custom-modal-overlay');
+            const mTitle = document.getElementById('modal-title');
+            const mMsg = document.getElementById('modal-msg');
+            const mInput = document.getElementById('modal-input');
+            const mImg = document.getElementById('modal-image-preview');
+            const btnOk = document.getElementById('modal-btn-ok');
+            const btnCancel = document.getElementById('modal-btn-cancel');
+
+            mTitle.innerText = title;
+            mMsg.innerText = msg;
+            mImg.style.display = 'none';
+            mInput.style.display = 'none';
+            btnCancel.style.display = 'none';
+            mInput.value = defaultValue;
+
+            if (type === 'prompt') {
+                mInput.style.display = 'block';
+                btnCancel.style.display = 'block';
+                setTimeout(() => mInput.focus(), 100);
+            } else if (type === 'confirm') {
+                btnCancel.style.display = 'block';
+            } else if (type === 'image') {
+                 mImg.style.display = 'block';
+                 mImg.innerHTML = `<img src="${defaultValue}" style="max-width:100%; max-height:200px; border:1px solid #ccc;">`;
+            }
+
+            overlay.style.display = 'flex';
+
+            btnOk.onclick = function() {
+                overlay.style.display = 'none';
+                if (callback) {
+                    if (type === 'prompt') callback(mInput.value);
+                    else callback(true);
+                }
+            };
+            btnCancel.onclick = function() {
+                overlay.style.display = 'none';
+                if (type === 'confirm' && callback) callback(false);
+            }
+            
+            mInput.onkeydown = function(e) {
+                if(e.key === 'Enter') btnOk.click();
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal-overlay').style.display = 'none';
+        }
+
+        /* --- SYSTEM RESET LOGIC --- */
+        function systemResetRequest() {
+            showModal('confirm', 'Factory Reset', 'Are you sure you want to reset the PC? All data will be lost.', (result) => {
+                if(result) {
+                    localStorage.removeItem('webos_sys_v1');
+                    location.reload();
+                }
+            });
+        }
+
+        /* --- POINTER SYSTEM (Desktop) --- */
+        const cursor = document.getElementById('cursor');
+        document.addEventListener('mousemove', (e) => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        /* --- SYSTEM BOOT --- */
+        window.onload = function() {
+            applySavedWallpaper();
+            initPaint(); // Initialize Paint Canvas
+
+            setTimeout(() => { document.getElementById('boot-text').innerText = "Hp"; }, 1000);
+            setTimeout(() => { document.getElementById('boot-text').innerText = "Welcome"; }, 2500);
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('boot-screen').style.display = 'none';
+                    document.getElementById('login-screen').style.display = 'flex';
+                    document.getElementById('pass-input').focus();
+                }, 500);
+            }, 3500);
+            updateClock();
+            initBattery();
+            renderFiles();
+            checkAppStatus(); 
+            renderStartMenu(); 
+            renderBin();       
+            initDesktopIcons(); // Initialize Grid & Drag Logic
+        };
+
+        function login() {
+            document.getElementById('login-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('login-screen').style.display = 'none';
+            }, 500);
+        }
+
+        /* --- CLOCK & DATE --- */
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock-time').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('clock-date').innerText = now.toLocaleDateString();
+            setTimeout(updateClock, 1000);
+        }
+
+        /* --- BATTERY API --- */
+        function initBattery() {
+            if ('getBattery' in navigator) {
+                navigator.getBattery().then(function(battery) {
+                    function updateBattery() {
+                        const level = Math.floor(battery.level * 100);
+                        document.getElementById('battery-level').innerText = level + '%';
+                        const icon = document.getElementById('battery-icon');
+                        icon.className = 'fas'; 
+                        if (battery.charging) icon.classList.add('fa-bolt');
+                        else {
+                            if(level > 90) icon.classList.add('fa-battery-full');
+                            else if(level > 60) icon.classList.add('fa-battery-three-quarters');
+                            else if(level > 30) icon.classList.add('fa-battery-half');
+                            else icon.classList.add('fa-battery-quarter');
+                        }
+                    }
+                    updateBattery();
+                    battery.addEventListener('levelchange', updateBattery);
+                    battery.addEventListener('chargingchange', updateBattery);
+                });
+            } else {
+                document.getElementById('battery-level').innerText = '100%';
+                document.getElementById('battery-icon').classList.add('fa-battery-full');
+            }
+        }
+
+        /* --- NOTIFICATION CENTER --- */
+        function toggleNotif() {
+            const panel = document.getElementById('notification-panel');
+            if (panel.style.display === 'flex') {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'flex';
+                document.getElementById('start-menu').style.display = 'none';
+            }
+        }
+
+        /* --- DESKTOP GRID & DRAG SYSTEM --- */
+        const GRID_W = 90;
+        const GRID_H = 100;
+        const START_MARGIN_X = 10;
+        const START_MARGIN_Y = 10;
+        
+        function initDesktopIcons() {
+            const icons = document.querySelectorAll('.desktop-icon');
+            let defaultRow = 0;
+            let defaultCol = 0;
+            const maxRows = Math.floor((window.innerHeight - 50) / GRID_H);
+
+            icons.forEach((icon, index) => {
+                const appId = icon.getAttribute('data-app');
+                
+                // Get saved position or calculate default
+                let pos = sysData.iconLayout[appId];
+                
+                if (!pos) {
+                    // Default Auto-Arrange (Top-Down, Left-Right)
+                    pos = { col: defaultCol, row: defaultRow };
+                    defaultRow++;
+                    if (defaultRow >= maxRows) {
+                        defaultRow = 0;
+                        defaultCol++;
+                    }
+                    // Save initial default position
+                    sysData.iconLayout[appId] = pos;
+                }
+
+                // Apply Position
+                icon.style.left = (START_MARGIN_X + pos.col * GRID_W) + 'px';
+                icon.style.top = (START_MARGIN_Y + pos.row * GRID_H) + 'px';
+
+                // Add Touch/Mouse Listeners for Dragging
+                addIconInteraction(icon, appId);
+            });
+            saveData();
+        }
+
+        // Helper to find which app is at a grid position
+        function getAppAtPosition(col, row) {
+            for (let app in sysData.iconLayout) {
+                if (sysData.iconLayout[app].col === col && sysData.iconLayout[app].row === row) {
+                    return app;
+                }
+            }
+            return null;
+        }
+
+        function addIconInteraction(icon, appId) {
+            let pressTimer;
+            let isDraggingIcon = false;
+            let startX, startY, initialLeft, initialTop;
+
+            function startPress(e) {
+                // Ignore if right click
+                if(e.button === 2) return;
+
+                isDraggingIcon = false;
+                
+                // Start timer for long press (or immediate drag on desktop if mouse moves)
+                pressTimer = setTimeout(() => {
+                    isDraggingIcon = true;
+                    icon.classList.add('dragging');
+                }, 500); // 500ms long press
+
+                // Capture starting coords
+                const evt = e.touches ? e.touches[0] : e;
+                startX = evt.clientX;
+                startY = evt.clientY;
+                initialLeft = parseInt(icon.style.left || 0);
+                initialTop = parseInt(icon.style.top || 0);
+
+                // Add Move/Up listeners to document
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onEnd);
+                document.addEventListener('touchmove', onMove, {passive: false});
+                document.addEventListener('touchend', onEnd);
+            }
+
+            function onMove(e) {
+                const evt = e.touches ? e.touches[0] : e;
+                const dx = evt.clientX - startX;
+                const dy = evt.clientY - startY;
+
+                // If moved significantly before timer, treat as drag start
+                if (!isDraggingIcon && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+                    clearTimeout(pressTimer);
+                    isDraggingIcon = true;
+                    icon.classList.add('dragging');
+                }
+
+                if (isDraggingIcon) {
+                    if(e.cancelable) e.preventDefault(); // Stop scrolling on mobile
+                    icon.style.left = (initialLeft + dx) + 'px';
+                    icon.style.top = (initialTop + dy) + 'px';
+                }
+            }
+
+            function onEnd(e) {
+                clearTimeout(pressTimer);
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onEnd);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+
+                if (isDraggingIcon) {
+                    icon.classList.remove('dragging');
+                    const currentLeft = parseInt(icon.style.left || 0);
+                    const currentTop = parseInt(icon.style.top || 0);
+
+                    // 1. Calculate drop Grid Cell
+                    let col = Math.round((currentLeft - START_MARGIN_X) / GRID_W);
+                    let row = Math.round((currentTop - START_MARGIN_Y) / GRID_H);
+
+                    // Boundaries
+                    if (col < 0) col = 0;
+                    if (row < 0) row = 0;
+
+                    // 2. Store original position before updating
+                    const originalPos = sysData.iconLayout[appId]; 
+
+                    // 3. Check for collision
+                    const occupiedApp = getAppAtPosition(col, row);
+
+                    // 4. Handle Collision (Swap)
+                    if (occupiedApp && occupiedApp !== appId) {
+                        // Move the occupied app to the dragged icon's old position
+                        sysData.iconLayout[occupiedApp] = { col: originalPos.col, row: originalPos.row };
+                        
+                        // Update DOM for the swapped app
+                        const occupiedEl = document.querySelector(`.desktop-icon[data-app="${occupiedApp}"]`);
+                        if(occupiedEl) {
+                            occupiedEl.style.left = (START_MARGIN_X + originalPos.col * GRID_W) + 'px';
+                            occupiedEl.style.top = (START_MARGIN_Y + originalPos.row * GRID_H) + 'px';
+                        }
+                    }
+
+                    // 5. Place dragged icon
+                    icon.style.left = (START_MARGIN_X + col * GRID_W) + 'px';
+                    icon.style.top = (START_MARGIN_Y + row * GRID_H) + 'px';
+                    sysData.iconLayout[appId] = { col: col, row: row };
+
+                    saveData();
+                } else {
+                    // It was a click/tap
+                    openWindow(appId);
+                }
+            }
+
+            icon.addEventListener('mousedown', startPress);
+            icon.addEventListener('touchstart', startPress, {passive: true});
+        }
+
+        /* --- START MENU RENDERING (DYNAMIC) --- */
+        function renderStartMenu() {
+            const list = document.getElementById('start-apps-list');
+            list.innerHTML = '';
+            
+            // Default Apps
+            const apps = [
+                {id: 'pc', icon: 'fas fa-laptop', color: '#4db8ff', name: 'This PC'},
+                {id: 'store', icon: 'fas fa-shopping-bag', color: '#ff3333', name: 'Store'},
+                {id: 'paint', icon: 'fas fa-palette', color: '#e91e63', name: 'MS Paint'},
+                {id: 'terminal', icon: 'fas fa-terminal', color: '#aaa', name: 'Terminal'},
+                {id: 'notepad', icon: 'fas fa-file-lines', color: '#4db8ff', name: 'Notepad'},
+                {id: 'calculator', icon: 'fas fa-calculator', color: '#ffbd2e', name: 'Calculator'},
+                {id: 'browser', icon: 'fab fa-chrome', color: '#27c93f', name: 'Browser'},
+                {id: 'settings', icon: 'fas fa-gear', color: '#ddd', name: 'Settings'}
+            ];
+
+            // Add Installed Apps
+            if (sysData.installedApps.bluestack) {
+                apps.push({id: 'bluestack', icon: 'fas fa-mobile-alt', color: '#00aaff', name: 'Blue Stack'});
+            }
+
+            // Render
+            apps.forEach(app => {
+                const div = document.createElement('div');
+                div.className = 'start-item';
+                div.onclick = () => openWindow(app.id);
+                div.innerHTML = `<i class="${app.icon}" style="color:${app.color};"></i> ${app.name}`;
+                list.appendChild(div);
+            });
+        }
+
+        /* --- FILE MANAGER LOGIC (PERSISTENT & MODAL UPDATED) --- */
+        let currentFileIndex = -1; // To track editing
+
+        function openFileManager() {
+            document.getElementById('pc-drives').style.display = 'none';
+            document.getElementById('pc-files').style.display = 'flex';
+        }
+
+        function renderFiles() {
+            const grid = document.getElementById('file-list');
+            grid.innerHTML = '';
+            sysData.files.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'file-icon';
+                div.onclick = (e) => { 
+                    if(e.target.className !== 'file-del-btn') openFile(index); 
+                };
+                
+                let icon = '';
+                if(item.type === 'folder') icon = '<i class="fas fa-folder" style="color:#f8d775"></i>';
+                else if(item.type === 'image') icon = '<i class="fas fa-image" style="color:#b388ff"></i>';
+                else icon = '<i class="fas fa-file-alt" style="color:#ccc"></i>';
+                
+                // Add Delete Button
+                const delBtn = `<div class="file-del-btn" onclick="deleteFile(${index})">✖</div>`;
+                
+                div.innerHTML = `${delBtn}${icon}<span>${item.name}</span>`;
+                grid.appendChild(div);
+            });
+        }
+
+        function createFile(type) {
+            showModal('prompt', 'New ' + type, `Enter name for the new ${type}:`, (name) => {
+                if (name && name.trim() !== '') {
+                    sysData.files.push({name: name, type: type, content: ''});
+                    saveData();
+                    renderFiles();
+                }
+            }, `New ${type === 'folder' ? 'Folder' : 'Text Document'}`);
+        }
+
+        function deleteFile(index) {
+            const file = sysData.files[index];
+            sysData.bin.push(file); // Move to Bin
+            sysData.files.splice(index, 1); // Remove from PC
+            saveData();
+            renderFiles();
+            renderBin();
+        }
+
+        function openFile(index) {
+            const file = sysData.files[index];
+            if(file.type === 'folder') {
+                showModal('alert', 'Folder', 'This folder is empty.');
+            } else if (file.type === 'image') {
+                // Open Image Viewer
+                showModal('image', file.name, 'Image Viewer', null, file.content);
+            } else {
+                // Open Notepad with content
+                openWindow('notepad');
+                document.getElementById('notepad-area').value = file.content || "";
+                currentFileIndex = index;
+            }
+        }
+
+        /* --- RECYCLE BIN LOGIC --- */
+        function renderBin() {
+            const container = document.getElementById('bin-files');
+            container.innerHTML = '';
+            
+            if(sysData.bin.length === 0) {
+                container.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">Empty.</div>';
+                return;
+            }
+
+            sysData.bin.forEach((item, index) => {
+                const row = document.createElement('div');
+                row.className = 'bin-item-row';
+                let iconClass = 'fa-file-alt'; let iconColor = '#ccc';
+                if(item.type === 'folder') { iconClass='fa-folder'; iconColor='#f8d775'; }
+                if(item.type === 'image') { iconClass='fa-image'; iconColor='#b388ff'; }
+
+                row.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <i class="fas ${iconClass}" style="color:${iconColor}"></i> ${item.name}
+                    </div>
+                    <div class="bin-actions">
+                        <button onclick="restoreFile(${index})">Restore</button>
+                        <button onclick="deleteFilePerm(${index})" style="color:red;">✖</button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function emptyBin() {
+            if(sysData.bin.length > 0) {
+                showModal('confirm', 'Empty Bin', 'Delete all items permanently?', (res) => {
+                    if(res) {
+                        sysData.bin = [];
+                        saveData();
+                        renderBin();
+                    }
+                });
+            }
+        }
+
+        function restoreFile(index) {
+            const file = sysData.bin[index];
+            sysData.files.push(file);
+            sysData.bin.splice(index, 1);
+            saveData();
+            renderBin();
+            renderFiles();
+        }
+
+        function deleteFilePerm(index) {
+            sysData.bin.splice(index, 1);
+            saveData();
+            renderBin();
+        }
+
+        /* --- NOTEPAD SAVE LOGIC --- */
+        function saveNotepad() {
+            const content = document.getElementById('notepad-area').value;
+            if(currentFileIndex > -1 && sysData.files[currentFileIndex]) {
+                sysData.files[currentFileIndex].content = content;
+                saveData();
+                showModal('alert', 'Notepad', 'File saved successfully.');
+            } else {
+                showModal('prompt', 'Save As', 'Enter filename:', (name) => {
+                    if(name) {
+                        sysData.files.push({name: name + ".txt", type: 'file', content: content});
+                        saveData();
+                        renderFiles();
+                        currentFileIndex = sysData.files.length - 1; 
+                    }
+                }, "Untitled.txt");
+            }
+        }
+
+        /* --- MS PAINT LOGIC --- */
+        let paintCtx, paintCanvas;
+        let painting = false;
+        let paintTool = 'brush'; // brush, eraser, rect, circle
+        let paintColor = 'black';
+        let snapshot;
+        let drawStartX, drawStartY;
+
+        function initPaint() {
+            paintCanvas = document.getElementById('paint-canvas');
+            paintCtx = paintCanvas.getContext('2d');
+            paintCtx.fillStyle = 'white';
+            paintCtx.fillRect(0,0, paintCanvas.width, paintCanvas.height);
+            paintCtx.lineCap = 'round';
+            paintCtx.lineWidth = 5;
+
+            paintCanvas.addEventListener('mousedown', startDraw);
+            paintCanvas.addEventListener('mouseup', endDraw);
+            paintCanvas.addEventListener('mousemove', draw);
+            // Handle touch for paint
+            paintCanvas.addEventListener('touchstart', (e) => {
+               if(e.cancelable) e.preventDefault();
+               startDraw(e.touches[0]);
+            }, {passive: false});
+            paintCanvas.addEventListener('touchend', endDraw);
+            paintCanvas.addEventListener('touchmove', (e) => {
+               if(e.cancelable) e.preventDefault();
+               draw(e.touches[0]);
+            }, {passive: false});
+        }
+
+        function setPaintTool(tool, btn) {
+            paintTool = tool;
+            document.querySelectorAll('.paint-btn').forEach(b => b.classList.remove('active-tool'));
+            btn.classList.add('active-tool');
+        }
+
+        function setPaintColor(color, btn) {
+            paintColor = color;
+            document.querySelectorAll('.color-swatch').forEach(b => b.classList.remove('active-color'));
+            btn.classList.add('active-color');
+        }
+
+        function startDraw(e) {
+            painting = true;
+            paintCtx.beginPath();
+            const rect = paintCanvas.getBoundingClientRect();
+            drawStartX = e.clientX - rect.left;
+            drawStartY = e.clientY - rect.top;
+            snapshot = paintCtx.getImageData(0, 0, paintCanvas.width, paintCanvas.height); // Save state for shapes
+        }
+
+        function endDraw() {
+            painting = false;
+            paintCtx.beginPath(); // Reset path
+        }
+
+        function draw(e) {
+            if(!painting) return;
+            const rect = paintCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            paintCtx.strokeStyle = paintTool === 'eraser' ? 'white' : paintColor;
+            paintCtx.fillStyle = paintColor;
+
+            if (paintTool === 'brush' || paintTool === 'eraser') {
+                paintCtx.lineWidth = paintTool === 'eraser' ? 15 : 5;
+                paintCtx.lineTo(x, y);
+                paintCtx.stroke();
+                paintCtx.beginPath();
+                paintCtx.moveTo(x, y);
+            } else {
+                // Shapes: Restore snapshot to avoid trailing lines, then draw shape
+                paintCtx.putImageData(snapshot, 0, 0);
+                paintCtx.lineWidth = 3;
+                
+                if (paintTool === 'rect') {
+                    paintCtx.strokeRect(drawStartX, drawStartY, x - drawStartX, y - drawStartY);
+                } else if (paintTool === 'circle') {
+                    paintCtx.beginPath();
+                    const radius = Math.sqrt(Math.pow(x - drawStartX, 2) + Math.pow(y - drawStartY, 2));
+                    paintCtx.arc(drawStartX, drawStartY, radius, 0, 2 * Math.PI);
+                    paintCtx.stroke();
+                }
+            }
+        }
+
+        function clearCanvas() {
+            paintCtx.fillStyle = 'white';
+            paintCtx.fillRect(0,0, paintCanvas.width, paintCanvas.height);
+        }
+
+        function savePaint() {
+            const dataUrl = paintCanvas.toDataURL("image/png");
+            showModal('prompt', 'Save Drawing', 'Enter filename:', (name) => {
+                if(name) {
+                    // Check extension
+                    if(!name.endsWith('.png')) name += '.png';
+                    sysData.files.push({name: name, type: 'image', content: dataUrl});
+                    saveData();
+                    renderFiles();
+                    showModal('alert', 'Paint', 'Image saved to This PC!');
+                }
+            }, "MyDrawing.png");
+        }
+
+        /* --- STORE & BLUE STACK LOGIC (UPDATED) --- */
+        function checkAppStatus() {
+            const btn = document.getElementById('btn-dl-bluestack');
+            const delBtn = document.getElementById('btn-del-bluestack');
+            const status = document.getElementById('dl-status');
+            const desktopIcon = document.getElementById('desktop-bluestack');
+
+            if (sysData.installedApps.bluestack) {
+                status.innerText = "Installed";
+                btn.innerText = "Open";
+                btn.disabled = false;
+                btn.onclick = () => openWindow('bluestack');
+                document.getElementById('bluestack-frame').src = "https://2212022025.github.io/phone/";
+                delBtn.style.display = 'flex'; 
+                
+                // Show Desktop Icon
+                if(desktopIcon) {
+                    desktopIcon.style.display = 'flex';
+                    // Re-init grid logic for this new icon if needed
+                    initDesktopIcons(); 
+                }
+                
+            } else {
+                status.innerText = "";
+                btn.innerText = "Get";
+                btn.disabled = false;
+                btn.onclick = () => downloadApp('bluestack');
+                document.getElementById('bluestack-frame').src = "";
+                delBtn.style.display = 'none'; 
+                
+                // Hide Desktop Icon
+                if(desktopIcon) desktopIcon.style.display = 'none';
+            }
+        }
+
+        function downloadApp(app) {
+            if(app === 'bluestack') {
+                const btn = document.getElementById('btn-dl-bluestack');
+                const status = document.getElementById('dl-status');
+                
+                const totalSize = 512 + 267 + 120; // 899 MB
+                const speed = 25; // 25 MB/s
+                let current = 0;
+                
+                btn.disabled = true;
+                btn.innerText = "Downloading...";
+                
+                const interval = setInterval(() => {
+                    current += (speed / 10); 
+                    
+                    if(current < 512) status.innerText = `Downloading Core... ${Math.floor(current)}MB / 899MB`;
+                    else if(current < 779) status.innerText = `Downloading Assets... ${Math.floor(current)}MB / 899MB`;
+                    else status.innerText = `Finalizing... ${Math.floor(current)}MB / 899MB`;
+
+                    if(current >= totalSize) {
+                        clearInterval(interval);
+                        // Install App
+                        sysData.installedApps.bluestack = true;
+                        saveData();
+                        checkAppStatus();
+                        renderStartMenu(); // Update Start Menu
+                        showModal('alert', 'Store', 'Blue Stack Simulator installed successfully!');
+                    }
+                }, 100);
+            }
+        }
+
+        function uninstallApp(app) {
+            showModal('confirm', 'Uninstall App', "Are you sure you want to uninstall " + app + "?", (result) => {
+                if(result) {
+                    if(app === 'bluestack') {
+                        sysData.installedApps.bluestack = false;
+                        saveData();
+                        checkAppStatus();
+                        closeWindow('win-bluestack'); 
+                        renderStartMenu(); // Remove from Start Menu
+                    }
+                }
+            });
+        }
+
+        /* --- WINDOW MANAGEMENT --- */
+        let zIndex = 100;
+
+        function openWindow(app) {
+            document.getElementById('start-menu').style.display = 'none';
+            
+            const id = 'win-' + app;
+            const win = document.getElementById(id);
+            if (!win) return; 
+
+            win.style.display = 'flex';
+            bringFront(id);
+            
+            if(!document.getElementById('task-' + app)) {
+                const task = document.createElement('div');
+                task.className = 'taskbar-item active';
+                task.id = 'task-' + app;
+                
+                let iconClass = "fas fa-window-maximize";
+                let label = app.charAt(0).toUpperCase() + app.slice(1);
+                
+                if(app === 'terminal') iconClass = "fas fa-terminal";
+                if(app === 'notepad') iconClass = "fas fa-file-lines";
+                if(app === 'paint') { iconClass = "fas fa-palette"; label = "MS Paint"; }
+                if(app === 'calculator') iconClass = "fas fa-calculator";
+                if(app === 'browser') iconClass = "fab fa-chrome";
+                if(app === 'settings') iconClass = "fas fa-gear";
+                if(app === 'pc') { iconClass = "fas fa-laptop"; label = "This PC"; }
+                if(app === 'bin') { iconClass = "fas fa-trash-alt"; label = "Recycle Bin"; }
+                if(app === 'store') { iconClass = "fas fa-shopping-bag"; label = "Store"; }
+                if(app === 'bluestack') { iconClass = "fas fa-mobile-alt"; label = "Blue Stack"; }
+
+                task.innerHTML = `<i class="${iconClass}" style="margin-right:8px;"></i> <span>${label}</span>`;
+                
+                task.onclick = () => {
+                    if(win.style.display === 'none') {
+                        win.style.display = 'flex';
+                        bringFront(id);
+                    } else if (win.classList.contains('focused')) {
+                        minimizeWindow(id);
+                    } else {
+                        bringFront(id);
+                    }
+                };
+                document.getElementById('task-list').appendChild(task);
+            }
+        }
+
+        function closeWindow(id) {
+            document.getElementById(id).style.display = 'none';
+            document.getElementById(id).classList.remove('maximized');
+            const app = id.replace('win-', '');
+            const task = document.getElementById('task-' + app);
+            if(task) task.remove();
+            
+            if(app === 'notepad') {
+                document.getElementById('notepad-area').value = "";
+                currentFileIndex = -1;
+            }
+        }
+
+        function minimizeWindow(id) {
+            const win = document.getElementById(id);
+            win.style.display = 'none';
+            const app = id.replace('win-', '');
+            const task = document.getElementById('task-' + app);
+            if(task) task.classList.remove('active');
+        }
+
+        function toggleMaximize(id) {
+            const win = document.getElementById(id);
+            win.classList.toggle('maximized');
+            bringFront(id);
+        }
+
+        function bringFront(id) {
+            const win = document.getElementById(id);
+            win.style.zIndex = ++zIndex;
+            document.querySelectorAll('.window').forEach(w => w.classList.remove('focused'));
+            win.classList.add('focused');
+            document.querySelectorAll('.taskbar-item').forEach(t => t.classList.remove('active'));
+            const app = id.replace('win-', '');
+            const task = document.getElementById('task-' + app);
+            if(task) task.classList.add('active');
+        }
+
+        function toggleStart() {
+            const menu = document.getElementById('start-menu');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+            menu.style.zIndex = ++zIndex;
+            document.getElementById('notification-panel').style.display = 'none';
+        }
+
+        /* --- BACKGROUND MANAGEMENT (PERSISTENT) --- */
+        function changeBg(el) {
+            let bg = el.style.backgroundImage || el.style.backgroundColor;
+            sysData.wallpaper = bg; // Update State
+            saveData(); // Save
+            applySavedWallpaper();
+        }
+
+        function applySavedWallpaper() {
+            const desktop = document.getElementById('desktop');
+            if (sysData.wallpaper.includes('url')) {
+                desktop.style.backgroundImage = sysData.wallpaper.replace(/^url\(['"]?/, '').replace(/['"]?\)$/, '');
+                desktop.style.backgroundColor = '';
+                desktop.style.background = sysData.wallpaper; // Fallback
+            } else {
+                desktop.style.backgroundImage = '';
+                desktop.style.backgroundColor = sysData.wallpaper;
+            }
+            desktop.style.backgroundSize = 'cover';
+            desktop.style.backgroundPosition = 'center';
+            desktop.style.backgroundRepeat = 'no-repeat';
+        }
+
+        /* --- DRAGGABLE WINDOWS (MOUSE & TOUCH) --- */
+        let isDragging = false;
+        let currentDrag = null;
+        let offset = { x: 0, y: 0 };
+
+        function dragStart(e, id) {
+            const win = document.getElementById(id);
+            if(win.classList.contains('maximized')) return;
+            isDragging = true;
+            currentDrag = win;
+            bringFront(id);
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            if(e.type === 'touchstart') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+            const rect = currentDrag.getBoundingClientRect();
+            offset.x = clientX - rect.left;
+            offset.y = clientY - rect.top;
+        }
+
+        function onDragMove(e) {
+            if (!isDragging || !currentDrag) return;
+            e.preventDefault(); 
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            if(e.type === 'touchmove') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+            let x = clientX - offset.x;
+            let y = clientY - offset.y;
+            const maxX = window.innerWidth - currentDrag.offsetWidth;
+            const maxY = window.innerHeight - 45 - currentDrag.offsetHeight;
+            if(x < 0) x = 0; if(y < 0) y = 0; if(x > maxX) x = maxX; if(y > maxY) y = maxY;
+            currentDrag.style.left = x + 'px';
+            currentDrag.style.top = y + 'px';
+        }
+
+        function onDragEnd() { isDragging = false; currentDrag = null; }
+        document.addEventListener('mousemove', onDragMove);
+        document.addEventListener('mouseup', onDragEnd);
+        document.addEventListener('touchmove', onDragMove, { passive: false });
+        document.addEventListener('touchend', onDragEnd);
+
+        /* --- APP LOGIC --- */
+        function handleTerm(e) {
+            if (e.key === 'Enter') {
+                const input = document.getElementById('term-input');
+                const history = document.getElementById('term-history');
+                const val = input.value.trim();
+                history.innerHTML += `<div><span style="color:#0f0">root@webos:~$</span> ${val}</div>`;
+                let resp = "";
+                const cmd = val.toLowerCase();
+                if (cmd === 'help') resp = "COMMANDS: date, cls, echo, exit, reboot, whoami";
+                else if (cmd === 'date') resp = new Date().toString();
+                else if (cmd === 'cls') { history.innerHTML = ""; resp = null; }
+                else if (cmd.startsWith('echo ')) resp = val.substring(5);
+                else if (cmd === 'exit') closeWindow('win-terminal');
+                else if (cmd === 'reboot') location.reload();
+                else if (cmd === 'whoami') resp = "admin";
+                else if (cmd !== '') resp = `bash: ${val}: command not found`;
+                if (resp !== null && resp !== "") history.innerHTML += `<div style="color:#aaa; margin-bottom:10px;">${resp}</div>`;
+                input.value = "";
+                document.getElementById('term-content').scrollTop = document.getElementById('term-content').scrollHeight;
+            }
+        }
+
+        let calcExp = "";
+        function calc(v) {
+            if(v === 'C') calcExp = "";
+            else if(v === 'DEL') calcExp = calcExp.slice(0, -1);
+            else if(v === '=') { try { calcExp = eval(calcExp).toString(); } catch { calcExp = "Error"; } }
+            else { calcExp += v; }
+            document.getElementById('calc-res').innerText = calcExp || "0";
+        }
+
+        document.addEventListener('mousedown', (e) => {
+            const start = document.getElementById('start-menu');
+            const notif = document.getElementById('notification-panel');
+            const btn = document.getElementById('start-btn');
+            if (start.style.display === 'flex' && !start.contains(e.target) && !btn.contains(e.target)) {
+                start.style.display = 'none';
+            }
+            if (notif.style.display === 'flex' && !notif.contains(e.target) && !e.target.closest('.tray-icon')) {
+                notif.style.display = 'none';
+            }
+        });
+        document.addEventListener('touchstart', (e) => {
+            const start = document.getElementById('start-menu');
+            const notif = document.getElementById('notification-panel');
+            const btn = document.getElementById('start-btn');
+            if (start.style.display === 'flex' && !start.contains(e.target) && !btn.contains(e.target)) {
+                start.style.display = 'none';
+            }
+            if (notif.style.display === 'flex' && !notif.contains(e.target) && !e.target.closest('.tray-icon')) {
+                notif.style.display = 'none';
+            }
+        });
+
+    </script>
+</body>
+</html>
